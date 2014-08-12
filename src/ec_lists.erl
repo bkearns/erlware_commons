@@ -1,3 +1,4 @@
+%%% vi:ts=4 sw=4 et
 %%%-------------------------------------------------------------------
 %%% @copyright (C) 2011, Erlware LLC
 %%% @doc
@@ -67,7 +68,7 @@ fetch(Fun, List) when is_list(List), is_function(Fun) ->
 %%% Test Functions
 %%%===================================================================
 
--ifndef(NOTEST).
+-ifdef(DEV_ONLY).
 -include_lib("eunit/include/eunit.hrl").
 
 find1_test() ->

@@ -1,3 +1,4 @@
+%%% vi:ts=4 sw=4 et
 %%%-------------------------------------------------------------------
 %%% @copyright (C) 2011, Erlware LLC
 %%% @doc
@@ -15,13 +16,16 @@
          mkdir_p/1,
          find/2,
          is_symlink/1,
+         is_dir/1,
+         type/1,
+         real_dir_path/1,
          remove/1,
          remove/2,
          md5sum/1,
+         sha1sum/1,
          read/1,
          write/2,
-         write_term/2,
-         consult/1
+         write_term/2
         ]).
 
 -export_type([
@@ -55,7 +59,7 @@ exists(Filename) ->
 copy(From, To, []) ->
     copy(From, To);
 copy(From, To, [recursive] = Options) ->
-    case filelib:is_dir(From) of
+    case is_dir(From) of
         false ->
             copy(From, To);
         true ->
@@ -88,6 +92,18 @@ copy(From, To) ->
 -spec md5sum(string() | binary()) -> string().
 md5sum(Value) ->
     hex(binary_to_list(erlang:md5(Value))).
+    
+%% @doc return an sha1sum checksum string or a binary. Same as unix utility of
+%%      same name.
+-ifdef(deprecated_crypto).
+-spec sha1sum(string() | binary()) -> string().
+sha1sum(Value) ->  
+    hex(binary_to_list(crypto:sha(Value))).
+-else.
+-spec sha1sum(string() | binary()) -> string().
+sha1sum(Value) ->  
+    hex(binary_to_list(crypto:hash(sha, Value))).
+-endif.
 
 %% @doc delete a file. Use the recursive option for directories.
 %% <pre>
@@ -116,8 +132,45 @@ is_symlink(Path) ->
             false
     end.
 
+is_dir(Path) ->
+    case file:read_file_info(Path) of
+        {ok, #file_info{type = directory}} ->
+            true;
+        _ ->
+            false
+    end.
 
-%% @doc make a unique temorory directory. Similar function to BSD stdlib
+%% @doc returns the type of the file.
+-spec type(file:name()) -> file | symlink | directory | undefined.
+type(Path) ->
+    case filelib:is_regular(Path) of
+        true ->
+            file;
+        false ->
+            case is_symlink(Path) of
+                true ->
+                    symlink;
+                false ->
+                    case is_dir(Path) of
+                        true -> directory;
+                        false -> undefined
+                    end
+            end
+
+    end.
+%% @doc gets the real path of a directory. This is mostly useful for
+%% resolving symlinks. Be aware that this temporarily changes the
+%% current working directory to figure out what the actual path
+%% is. That means that it can be quite slow.
+-spec real_dir_path(file:name()) -> file:name().
+real_dir_path(Path) ->
+    {ok, CurCwd} = file:get_cwd(),
+    ok = file:set_cwd(Path),
+    {ok, RealPath} = file:get_cwd(),
+    ok = file:set_cwd(CurCwd),
+    filename:absname(RealPath).
+
+%% @doc make a unique temporary directory. Similar function to BSD stdlib
 %% function of the same name.
 -spec insecure_mkdtemp() -> TmpDirPath::file:name().
 insecure_mkdtemp() ->
@@ -148,18 +201,8 @@ mkdir_path(Path) ->
     mkdir_p(Path).
 
 
-%% @doc consult an erlang term file from the file system.
-%%      Provide user readible exeption on failure.
--spec consult(FilePath::file:name()) -> term().
-consult(FilePath) ->
-    case file:consult(FilePath) of
-        {ok, [Term]} ->
-            Term;
-        Error ->
-            Error
-    end.
 %% @doc read a file from the file system. Provide UEX exeption on failure.
--spec read(FilePath::file:filename()) -> binary() | {error, Reason::term()}.
+-spec read(FilePath::file:filename()) -> {ok, binary()} | {error, Reason::term()}.
 read(FilePath) ->
     %% Now that we are moving away from exceptions again this becomes
     %% a bit redundant but we want to be backwards compatible as much
@@ -186,7 +229,7 @@ write_term(FileName, Term) ->
 find([], _) ->
     [];
 find(FromDir, TargetPattern) ->
-    case filelib:is_dir(FromDir) of
+    case is_dir(FromDir) of
         false ->
             case re:run(FromDir, TargetPattern) of
                 {match, _} -> [FromDir];
@@ -215,18 +258,19 @@ find_in_subdirs(FromDir, TargetPattern) ->
                         end
                 end,
                 [],
-                filelib:wildcard(filename:join(FromDir, "*"))).
+                sub_files(FromDir)).
+
 
 
 -spec remove_recursive(file:name(), Options::list()) -> ok | {error, Reason::term()}.
 remove_recursive(Path, Options) ->
-    case filelib:is_dir(Path) of
+    case is_dir(Path) of
         false ->
             file:delete(Path);
         true ->
             lists:foreach(fun(ChildPath) ->
                                   remove_recursive(ChildPath, Options)
-                          end, filelib:wildcard(filename:join(Path, "*"))),
+                          end, sub_files(Path)),
             file:del_dir(Path)
     end.
 
@@ -247,11 +291,11 @@ copy_subfiles(From, To, Options) ->
                 ChildTo = filename:join([To, filename:basename(ChildFrom)]),
                 copy(ChildFrom, ChildTo, Options)
         end,
-    lists:foreach(Fun, filelib:wildcard(filename:join(From, "*"))).
+    lists:foreach(Fun, sub_files(From)).
 
 -spec make_dir_if_dir(file:name()) -> ok | {error, Reason::term()}.
 make_dir_if_dir(File) ->
-    case filelib:is_dir(File) of
+    case is_dir(File) of
         true  -> ok;
         false -> mkdir_path(File)
     end.
@@ -273,11 +317,15 @@ hex0(14) -> $e;
 hex0(15) -> $f;
 hex0(I)  -> $0 + I.
 
+
+sub_files(From) ->
+    {ok, SubFiles} = file:list_dir(From),
+    [filename:join(From, SubFile) || SubFile <- SubFiles].
 %%%===================================================================
 %%% Test Functions
 %%%===================================================================
 
--ifndef(NOTEST).
+-ifdef(DEV_ONLY).
 -include_lib("eunit/include/eunit.hrl").
 
 setup_test() ->
@@ -288,6 +336,9 @@ setup_test() ->
 
 md5sum_test() ->
     ?assertMatch("cfcd208495d565ef66e7dff9f98764da", md5sum("0")).
+    
+sha1sum_test() ->
+    ?assertMatch("b6589fc6ab0dc82cf12099d1c2d40ab994e8410c", sha1sum("0")).
 
 file_test() ->
     Dir = insecure_mkdtemp(),
@@ -296,12 +347,10 @@ file_test() ->
     filelib:ensure_dir(TermFile),
     filelib:ensure_dir(TermFileCopy),
     write_term(TermFile, "term"),
-    ?assertMatch("term", consult(TermFile)),
     ?assertMatch({ok, <<"\"term\". ">>}, read(TermFile)),
     copy(filename:dirname(TermFile),
          filename:dirname(TermFileCopy),
-         [recursive]),
-    ?assertMatch("term", consult(TermFileCopy)).
+         [recursive]).
 
 teardown_test() ->
     Dir = insecure_mkdtemp(),
@@ -334,13 +383,29 @@ exists_test() ->
     ?assertMatch(true, exists(Name1)),
     ?assertMatch(false, exists(NoName)).
 
+real_path_test() ->
+    BaseDir = "foo",
+    Dir = filename:absname(filename:join(BaseDir, "source1")),
+    LinkDir = filename:join([BaseDir, "link"]),
+    ok = mkdir_p(Dir),
+    file:make_symlink(Dir, LinkDir),
+    ?assertEqual(Dir, real_dir_path(LinkDir)),
+    ?assertEqual(directory, type(Dir)),
+    ?assertEqual(symlink, type(LinkDir)),
+    TermFile = filename:join(BaseDir, "test_file"),
+    ok = write_term(TermFile, foo),
+    ?assertEqual(file, type(TermFile)),
+    ?assertEqual(true, is_symlink(LinkDir)),
+    ?assertEqual(false, is_symlink(Dir)).
+
 find_test() ->
     %% Create a directory in /tmp for the test. Clean everything afterwards
     {BaseDir, _SourceDir, {Name1, Name2, Name3, _NoName}} = setup_base_and_target(),
-    ?assertMatch([Name2,
-                  Name3,
-                  Name1],
-                 find(BaseDir, "file[a-z]+\$")),
+    Result = find(BaseDir, "file[a-z]+\$"),
+    ?assertMatch(3, erlang:length(Result)),
+    ?assertEqual(true, lists:member(Name1, Result)),
+    ?assertEqual(true, lists:member(Name2, Result)),
+    ?assertEqual(true, lists:member(Name3, Result)),
     remove(BaseDir, [recursive]).
 
 -endif.

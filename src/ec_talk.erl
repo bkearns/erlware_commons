@@ -1,4 +1,5 @@
 %% -*- mode: Erlang; fill-column: 79; comment-column: 70; -*-
+%% vi:ts=4 sw=4 et
 %%%---------------------------------------------------------------------------
 %%% Permission is hereby granted, free of charge, to any person
 %%% obtaining a copy of this software and associated documentation
@@ -41,8 +42,6 @@
 -export_type([prompt/0,
               type/0,
               supported/0]).
-
--include_lib("eunit/include/eunit.hrl").
 
 %%============================================================================
 %% Types
@@ -201,6 +200,9 @@ get_string(String) ->
 %%%====================================================================
 %%% tests
 %%%====================================================================
+-ifdef(DEV_ONLY).
+-include_lib("eunit/include/eunit.hrl").
+
 general_test_() ->
     [?_test(42 == get_integer("42")),
      ?_test(500211 == get_integer("500211")),
@@ -215,3 +217,5 @@ general_test_() ->
      ?_test(false == get_boolean("False")),
      ?_test(false == get_boolean("No")),
      ?_test(false == get_boolean("no"))].
+
+-endif.

@@ -1,14 +1,26 @@
 language: erlang
 otp_release:
+       - 17.0
+       - R16B03-1
+       - R16B03
+       - R16B02
+       - R16B01
+       - R16B
        - R15B02
        - R15B01
        - R15B
        - R14B04
        - R14B03
        - R14B02
-before_script: "make get-deps"
-script: "make"
+script: "make rebuild"
 branches:
         only:
                 - master
-                - next
+notifications:
+  email:
+    - core@erlware.org
+  irc:
+    channels:
+      - "irc.freenode.org#erlware"
+    use_notice: true
+    skip_join: true

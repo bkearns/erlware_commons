@@ -1,3 +1,4 @@
+%%% vi:ts=4 sw=4 et
 %%%-------------------------------------------------------------------
 %%% @copyright (C) 2011, Erlware LLC
 %%% @doc
@@ -313,7 +314,7 @@ internal_pes(Vsn, LVsn) ->
 %%% Test Functions
 %%%===================================================================
 
--ifndef(NOTEST).
+-ifdef(DEV_ONLY).
 -include_lib("eunit/include/eunit.hrl").
 
 eql_test() ->

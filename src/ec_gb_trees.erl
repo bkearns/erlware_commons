@@ -1,3 +1,4 @@
+%%% vi:ts=4 sw=4 et
 %%%-------------------------------------------------------------------
 %%% @author Eric Merritt <ericbmerritt@gmail.com>
 %%% @copyright 2011 Erlware, LLC.
@@ -153,7 +154,7 @@ keys(Data) ->
 %%%===================================================================
 
 
--ifndef(NOTEST).
+-ifdef(DEV_ONLY).
 -include_lib("eunit/include/eunit.hrl").
 
 %% For me unit testing initially is about covering the obvious case. A
